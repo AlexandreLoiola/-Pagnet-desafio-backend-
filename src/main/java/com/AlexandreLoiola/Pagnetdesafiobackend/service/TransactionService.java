@@ -1,6 +1,8 @@
 package com.AlexandreLoiola.Pagnetdesafiobackend.service;
 
+import com.AlexandreLoiola.Pagnetdesafiobackend.dto.StoreOperationsDto;
 import com.AlexandreLoiola.Pagnetdesafiobackend.dto.TransactionDto;
+import com.AlexandreLoiola.Pagnetdesafiobackend.dto.OperationDto;
 import com.AlexandreLoiola.Pagnetdesafiobackend.dto.TransactionTypeDto;
 import com.AlexandreLoiola.Pagnetdesafiobackend.model.TransactionModel;
 import com.AlexandreLoiola.Pagnetdesafiobackend.model.TransactionTypeModel;
@@ -21,14 +23,15 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 @Service
 public class TransactionService {
 
   private TransactionRepository transactionRepository;
-
   private TransactionTypeRepository transactionTypeRepository;
 
   public TransactionService(TransactionRepository transactionRepository, TransactionTypeRepository transactionTypeRepository) {
@@ -51,9 +54,30 @@ public class TransactionService {
     return transactionDtos;
   }
 
-  public Set<TransactionDto> getOperations() {
-    Set<TransactionModel> transactionModel = transactionRepository.findAllByIsActiveTrue();
-    return convertSetModelToSetDto(transactionModel);
+  public Set<StoreOperationsDto> getStoreOperations() {
+    Map<String, StoreOperationsDto> storeOperationsMap = new HashMap<>();
+    Set<TransactionModel> transactionModels = transactionRepository.findAllByIsActiveTrue();
+
+    for (TransactionModel transactionModel : transactionModels) {
+      String storeName = transactionModel.getNameStore();
+      StoreOperationsDto storeOperationsDto = storeOperationsMap.getOrDefault(storeName, new StoreOperationsDto());
+      storeOperationsDto.setStoreName(storeName);
+
+      TransactionTypeModel transactionTypeModel = transactionTypeRepository.findByTypeAndIsActiveTrue(transactionModel.getTransactionType().getType()).orElseThrow(() -> new RuntimeException("Transaction type Not Found"));
+      Set<OperationDto> operationDtos = storeOperationsDto.getOperations();
+
+      var operationDto = new OperationDto();
+      operationDto.setDescription(transactionTypeModel.getDescription());
+      operationDto.setDirection(transactionTypeModel.getFlowDirection());
+      operationDto.setPartialValue(transactionModel.getAmount());
+
+      operationDtos.add(operationDto);
+      storeOperationsDto.setOperations(operationDtos);
+      storeOperationsDto.setTotalBalance(storeOperationsDto.getTotalBalance() + transactionModel.getAmount());
+
+      storeOperationsMap.put(storeName, storeOperationsDto);
+    }
+    return new HashSet<>(storeOperationsMap.values());
   }
 
   private TransactionTypeModel findTransactionTypeModel(char type) {
@@ -69,8 +93,8 @@ public class TransactionService {
 
   TransactionModel parseTxtFileToModel(String line) {
     TransactionModel transactionModel = new TransactionModel();
+    TransactionTypeModel transactionTypeModel = findTransactionTypeModel(line.charAt(0));
     try {
-      var transactionTypeModel = findTransactionTypeModel(line.charAt(0));
       transactionModel.setTransactionType(transactionTypeModel);
     } catch (Exception err) {
       throw new TransactionTypeNotFoundException("Cannot find the transaction type");
@@ -84,7 +108,11 @@ public class TransactionService {
       throw new InvalidDateFormatException("Invalid date format");
     }
     try {
-      transactionModel.setAmount((Float.parseFloat(line.substring(10, 19)) / 100));
+      float amount = Float.parseFloat(line.substring(10, 19)) / 100;
+      if (transactionTypeModel.getFlowDirection() == '-') {
+        amount *= -1;
+      }
+      transactionModel.setAmount(amount);
     } catch (NumberFormatException e) {
       throw new InvalidAmountFormatException("Invalid amount format");
     }
@@ -125,17 +153,5 @@ public class TransactionService {
     transactionDto.setOwnerStore(transactionModel.getOwnerStore());
     transactionDto.setNameStore(transactionModel.getNameStore());
     return transactionDto;
-  }
-
-  Set<TransactionDto> convertSetModelToSetDto(Set<TransactionModel> transactionModels) {
-    if (transactionModels != null || transactionModels.isEmpty()) {
-      throw new IllegalArgumentException("TransactionModel cannot be null");
-    }
-    Set<TransactionDto> transactionDtos = new HashSet<>();
-    for (TransactionModel transactionModel : transactionModels) {
-      var transactionDto = convertModelToDto(transactionModel);
-      transactionDtos.add(transactionDto);
-    }
-    return transactionDtos;
   }
 }
