@@ -2,7 +2,6 @@ package com.AlexandreLoiola.Pagnetdesafiobackend.model;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMax;
-import jakarta.validation.constraints.DecimalMin;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -28,7 +27,6 @@ public class TransactionModel {
   private LocalTime hour;
 
   @Column(name = "amount", nullable = false)
-  @DecimalMin(value = "0.00", inclusive = true)
   @DecimalMax(value = "9999999.99", inclusive = true)
   private float amount;
 
